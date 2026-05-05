@@ -1,6 +1,9 @@
 import { model } from "../config/gemini.js";
 import fs from "fs";
-import pdfParse from "pdf-parse";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 
 export const analyzeResume = async (req, res) => {
   let filePath;
@@ -30,7 +33,7 @@ You are an expert ATS system and career coach.
 Analyze the resume and return ONLY valid JSON:
 
 {
-  "score": number (0-100),
+  "score": number,
   "keywords_missing": ["skill1", "skill2"],
   "suggestions": ["improvement1", "improvement2"]
 }
@@ -44,20 +47,25 @@ Resume:
 ${resumeText}
 `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text();
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.4,
+      },
+    });
 
-    // 🧹 Clean response (Gemini sometimes adds ```json)
+    let text = result.response.text();
+
+    // 🧹 Clean Gemini output
     text = text.replace(/```json|```/g, "").trim();
 
     let parsed;
 
     try {
       parsed = JSON.parse(text);
-    } catch (err) {
+    } catch {
       parsed = {
-        error: "AI returned invalid JSON",
+        error: "Invalid JSON from AI",
         raw: text,
       };
     }
@@ -67,7 +75,7 @@ ${resumeText}
     console.error("Resume Analysis Error:", error);
     res.status(500).json({ message: "AI analysis failed" });
   } finally {
-    // 🧹 Delete uploaded file (important)
+    // 🧹 Cleanup file
     if (filePath && fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
