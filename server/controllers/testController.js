@@ -1,26 +1,32 @@
-import { questions } from "../data/questions.js";
-import { model } from "../config/gemini.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import TestResult from "../models/TestResult.js";
+import { questions } from "../data/questions.js";
+
+// Initialize AI configuration once at the top level
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // 📥 Get Questions
 export const getQuestions = (req, res) => {
   res.json(questions);
 };
 
-// 📤 Submit Test (WITH DB SAVE)
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
+// 📤 Submit Test (WITH AI ANALYSIS & DB SAVE)
 export const submitTest = async (req, res) => {
   try {
     const { answers } = req.body;
+    
+    // Ensure user is authenticated
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ message: "User not authenticated." });
+    }
+    
     const userId = req.user._id;
 
     // 1. Calculate a simple score (example logic)
     const score = Object.keys(answers).length * 10; 
 
     // 2. Prepare the AI Prompt
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = `
       The user took a career test. Here are their answers: ${JSON.stringify(answers)}.
       Their calculated score is ${score}.
@@ -32,8 +38,8 @@ export const submitTest = async (req, res) => {
       }
     `;
 
-    // 3. Call AI
-    const result = await model.generateContent(prompt);
+    // 3. Call AI using the pre-initialized model
+    const result = await aiModel.generateContent(prompt);
     const responseText = result.response.text();
     
     // Clean and parse the AI response
