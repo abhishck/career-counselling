@@ -12,58 +12,46 @@ export const getQuestions = (req, res) => {
 export const submitTest = async (req, res) => {
   try {
     const { answers } = req.body;
+    const userId = req.user._id;
 
-    // ❗ FIXED: Validation now checks for an Object, not an Array
-    if (!answers || typeof answers !== 'object' || Object.keys(answers).length === 0) {
-      return res.status(400).json({ message: "Valid answers are required" });
-    }
+    // 1. Calculate a simple score (example logic)
+    const score = Object.keys(answers).length * 10; 
 
-    // 🧮 Score logic (counting keys in the object)
-    const score = Object.keys(answers).length * 10;
-
-    // 🧠 FIXED: Convert Object (id: value) → readable text
-    // Example: { work_style: 'Analytical' } becomes "work_style: Analytical"
-    const userChoices = Object.entries(answers)
-      .map(([questionId, selectedOption]) => `${questionId}: ${selectedOption}`)
-      .join(", ");
-
-    // 🤖 Gemini Prompt
+    // 2. Prepare the AI Prompt
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = `
-You are an AI career counsellor.
+      The user took a career test. Here are their answers: ${JSON.stringify(answers)}.
+      Their calculated score is ${score}.
+      Based on these inputs, suggest 3 specific career paths that fit their profile.
+      Return the response as a valid JSON object with this exact structure:
+      {
+        "score": ${score},
+        "suggestions": ["Career 1", "Career 2", "Career 3"]
+      }
+    `;
 
-Based on the user's answers:
-${userChoices}
-
-Provide:
-1. Career suggestions
-2. Skills to learn
-3. Next steps
-
-Keep it short, structured, and practical.
-`;
-
+    // 3. Call AI
     const result = await model.generateContent(prompt);
-    let aiText = result.response.text();
+    const responseText = result.response.text();
+    
+    // Clean and parse the AI response
+    const jsonString = responseText.replace(/```json|```/g, "").trim();
+    const aiData = JSON.parse(jsonString);
 
-    // 🧹 Clean response
-    aiText = aiText.trim();
-
-    // 💾 SAVE RESULT IN DATABASE
-    const savedResult = await TestResult.create({
-      user: req.user._id,
-      answers: answers, // Storing the object directly is fine
-      score,
-      recommendation: aiText,
+    // 4. Save to Database
+    const newTest = await TestResult.create({
+      user: userId,
+      answers,
+      score: aiData.score,
+      recommendation: aiData.suggestions.join(", "),
     });
 
-    // ✅ Response
-    res.json({
-      message: "Test submitted successfully",
-      result: savedResult,
-    });
+    // 5. Send back to your React Frontend
+    res.status(200).json(aiData);
+
   } catch (error) {
-    console.error("Test Error:", error);
-    res.status(500).json({ message: "Test evaluation failed" });
+    console.error("AI Analysis Error:", error);
+    res.status(500).json({ message: "Failed to generate AI suggestions." });
   }
 };
 
