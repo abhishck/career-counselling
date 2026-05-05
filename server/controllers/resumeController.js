@@ -1,59 +1,67 @@
+import { GoogleAIFileManager } from "@google/generative-ai/server";
 import { model } from "../config/gemini.js";
-import { createRequire } from "module";
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
 
-const require = createRequire(import.meta.url);
-// 1. Load the module
-const pdfParseLib = require("pdf-parse");
+// Initialize File Manager
+const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
 
 export const analyzeResume = async (req, res) => {
+  let tempFilePath = null;
+
   try {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded." });
     }
 
-    // 2. Handle the "pdfParse is not a function" error
-    // Some versions/environments load it as { default: function } or just the function
-    const parse = pdfParseLib.default || pdfParseLib;
-    
-    // Ensure we are calling a function
-    if (typeof parse !== 'function') {
-      throw new Error("PDF parser library failed to load as a function.");
-    }
+    // 1. Create a temporary file path
+    tempFilePath = path.join(os.tmpdir(), `${Date.now()}-${req.file.originalname}`);
+    await fs.writeFile(tempFilePath, req.file.buffer);
 
-    // 📄 Extract text from the buffer
-    const pdfData = await parse(req.file.buffer);
-    const resumeText = pdfData.text;
-
-    if (!resumeText || resumeText.trim().length < 50) {
-      return res.status(400).json({ message: "Could not extract enough text from resume." });
-    }
-
-    // 🤖 Gemini Prompt
-    const prompt = `
-      You are an ATS analyzer. Analyze the following resume text.
-      Return the result as a strict JSON object with keys: "score", "keywords_missing", "suggestions".
-      
-      Resume Text:
-      ${resumeText}
-    `;
-
-    const chat = model.startChat({
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
-      },
+    // 2. Upload to Gemini
+    const uploadResult = await fileManager.uploadFile(tempFilePath, {
+      mimeType: "application/pdf",
+      displayName: req.file.originalname,
     });
 
-    const result = await chat.sendMessage(prompt);
-    const text = result.response.text();
+    // 3. Wait for the file to be processed
+    console.log(`Uploaded file: ${uploadResult.file.uri}`);
 
-    return res.json(JSON.parse(text));
+    // 4. Generate content
+    const prompt = `
+      You are an expert ATS analyzer. Analyze the provided resume file.
+      Return the result as a strict JSON object with keys: "score", "keywords_missing", "suggestions".
+    `;
+
+    const result = await model.generateContent([
+      {
+        fileData: {
+          mimeType: uploadResult.file.mimeType,
+          fileUri: uploadResult.file.uri,
+        },
+      },
+      { text: prompt },
+    ]);
+
+    const jsonText = result.response.text();
+    const cleanJson = jsonText.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    // 5. Clean up from Gemini and Local Disk
+    await fileManager.deleteFile(uploadResult.file.name);
+    await fs.unlink(tempFilePath);
+
+    return res.json(JSON.parse(cleanJson));
 
   } catch (error) {
-    console.error("Resume Analysis Error:", error);
+    console.error("Gemini Analysis Error:", error);
+    
+    // Cleanup if something crashed
+    if (tempFilePath) await fs.unlink(tempFilePath).catch(() => {});
+    
     return res.status(500).json({ 
       message: "AI analysis failed.", 
-      error: error.message 
+      details: error.message 
     });
   }
 };
