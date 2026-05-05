@@ -2,6 +2,7 @@ import express from "express";
 import "./config/env.js";
 import cors from "cors";
 import connectDB from "./config/db.js";
+import path from "path";
 
 // Routes
 import resumeRoutes from "./routes/resumeRoutes.js";
@@ -25,6 +26,9 @@ connectDB();
 // 🔍 Debug (remove in production later)
 console.log("✅ GEMINI KEY LOADED:", !!process.env.GEMINI_API_KEY);
 console.log("🔑 KEY LENGTH:", process.env.GEMINI_API_KEY?.length);
+
+console.log("🚀 Server is running in:", process.cwd());
+console.log("📂 Expected uploads folder:", path.join(process.cwd(), 'uploads'));
 
 const app = express();
 
