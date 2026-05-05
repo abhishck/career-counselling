@@ -4,6 +4,7 @@ import {
   getUserProfile,
   updateUserProfile,
 } from "../controllers/userController.js";
+import { getUserStats } from "../controllers/statsController.js";
 
 const router = express.Router();
 
@@ -12,5 +13,8 @@ router.get("/profile", protect, getUserProfile);
 
 // UPDATE profile
 router.put("/profile", protect, updateUserProfile);
+
+// In your routes file
+router.get("/api/user/stats", protect, getUserStats);
 
 export default router;
