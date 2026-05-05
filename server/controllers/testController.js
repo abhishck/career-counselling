@@ -4,7 +4,7 @@ import { questions } from "../data/questions.js";
 
 // Initialize AI configuration once at the top level
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
 // 📥 Get Questions
 export const getQuestions = (req, res) => {
