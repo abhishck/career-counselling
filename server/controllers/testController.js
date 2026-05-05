@@ -1,65 +1,64 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import TestResult from "../models/TestResult.js";
 import { questions } from "../data/questions.js";
 
-// Initialize AI configuration once at the top level
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+// 1. Helper function for logic-based suggestions
+const getCareerSuggestions = (score, answers) => {
+  // 1. Specific Logic: If they have a high score and like Coding
+  if (answers.interest === 'coding' && score > 60) {
+    return ["Senior Full Stack Developer", "Software Architect", "Lead DevOps Engineer"];
+  }
 
+  // 2. Specific Logic: If they prefer Design/Creativity
+  if (answers.interest === 'design') {
+    return ["UI/UX Designer", "Product Designer", "Graphic Lead"];
+  }
+
+  // 3. Specific Logic: If they like Management/People
+  if (answers.management_style === 'people-oriented' || score > 70) {
+    return ["Project Manager", "Team Lead", "Operations Manager"];
+  }
+
+  // 4. Default Fallback Logic (Score-based)
+  if (score <= 30) {
+    return ["Customer Support Representative", "Administrative Assistant"];
+  } else {
+    return ["Junior Data Analyst", "Technical Support Specialist"];
+  }
+};
 // 📥 Get Questions
 export const getQuestions = (req, res) => {
   res.json(questions);
 };
 
-// 📤 Submit Test (WITH AI ANALYSIS & DB SAVE)
+// 📤 Submit Test (Hardcoded logic, Database save)
+// 📤 Submit Test
 export const submitTest = async (req, res) => {
   try {
-    const { answers } = req.body;
-    
-    // Ensure user is authenticated
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({ message: "User not authenticated." });
-    }
-    
+    const { answers } = req.body; // e.g., { interest: 'coding', management_style: 'people-oriented' }
     const userId = req.user._id;
 
-    // 1. Calculate a simple score (example logic)
+    // Calculate score (Example logic: 10 points per answer)
     const score = Object.keys(answers).length * 10; 
 
-    // 2. Prepare the AI Prompt
-    const prompt = `
-      The user took a career test. Here are their answers: ${JSON.stringify(answers)}.
-      Their calculated score is ${score}.
-      Based on these inputs, suggest 3 specific career paths that fit their profile.
-      Return the response as a valid JSON object with this exact structure:
-      {
-        "score": ${score},
-        "suggestions": ["Career 1", "Career 2", "Career 3"]
-      }
-    `;
+    // Get smarter suggestions by passing both score AND answers
+    const suggestions = getCareerSuggestions(score, answers);
 
-    // 3. Call AI using the pre-initialized model
-    const result = await aiModel.generateContent(prompt);
-    const responseText = result.response.text();
-    
-    // Clean and parse the AI response
-    const jsonString = responseText.replace(/```json|```/g, "").trim();
-    const aiData = JSON.parse(jsonString);
-
-    // 4. Save to Database
+    // Save to Database
     const newTest = await TestResult.create({
       user: userId,
       answers,
-      score: aiData.score,
-      recommendation: aiData.suggestions.join(", "),
+      score: score,
+      recommendation: suggestions.join(", "),
     });
 
-    // 5. Send back to your React Frontend
-    res.status(200).json(aiData);
+    res.status(200).json({
+      score: score,
+      suggestions: suggestions
+    });
 
   } catch (error) {
-    console.error("AI Analysis Error:", error);
-    res.status(500).json({ message: "Failed to generate AI suggestions." });
+    console.error("Submission Error:", error);
+    res.status(500).json({ message: "Failed to process test results." });
   }
 };
 
