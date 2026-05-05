@@ -8,25 +8,23 @@ export const getQuestions = (req, res) => {
 };
 
 // 📤 Submit Test (WITH DB SAVE)
+
 export const submitTest = async (req, res) => {
   try {
     const { answers } = req.body;
 
-    // ❗ Validation
-    if (!answers || !Array.isArray(answers) || answers.length === 0) {
+    // ❗ FIXED: Validation now checks for an Object, not an Array
+    if (!answers || typeof answers !== 'object' || Object.keys(answers).length === 0) {
       return res.status(400).json({ message: "Valid answers are required" });
     }
 
-    // 🧮 Score logic (basic for now)
-    const score = answers.length * 10;
+    // 🧮 Score logic (counting keys in the object)
+    const score = Object.keys(answers).length * 10;
 
-    // 🧠 Convert answers → readable text
-    const userChoices = answers
-      .map((ans) => {
-        const q = questions.find((q) => q.id === ans.questionId);
-        return q ? q.options[ans.optionIndex] : "";
-      })
-      .filter(Boolean)
+    // 🧠 FIXED: Convert Object (id: value) → readable text
+    // Example: { work_style: 'Analytical' } becomes "work_style: Analytical"
+    const userChoices = Object.entries(answers)
+      .map(([questionId, selectedOption]) => `${questionId}: ${selectedOption}`)
       .join(", ");
 
     // 🤖 Gemini Prompt
@@ -47,13 +45,13 @@ Keep it short, structured, and practical.
     const result = await model.generateContent(prompt);
     let aiText = result.response.text();
 
-    // 🧹 Clean response (optional)
+    // 🧹 Clean response
     aiText = aiText.trim();
 
     // 💾 SAVE RESULT IN DATABASE
     const savedResult = await TestResult.create({
       user: req.user._id,
-      answers,
+      answers: answers, // Storing the object directly is fine
       score,
       recommendation: aiText,
     });
