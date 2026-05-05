@@ -9,12 +9,8 @@ export const chatWithAI = async (req, res) => {
       return res.status(400).json({ message: "Message is required" });
     }
 
-    let chat;
-
-    // 🔎 Find existing chat or create new
-    if (chatId) {
-      chat = await Chat.findById(chatId);
-    }
+    // 🔎 Find or create chat
+    let chat = chatId ? await Chat.findById(chatId) : null;
 
     if (!chat) {
       chat = await Chat.create({
@@ -23,55 +19,54 @@ export const chatWithAI = async (req, res) => {
       });
     }
 
-    // 🧠 Prepare history for Gemini
-    const formattedHistory = chat.messages.map((msg) => ({
+    // 🧠 Convert DB history → Gemini format
+    const history = chat.messages.map((msg) => ({
       role: msg.role === "user" ? "user" : "model",
       parts: [{ text: msg.text }],
     }));
 
-    // ➕ Add current message
-    formattedHistory.push({
-      role: "user",
-      parts: [{ text: message }],
-    });
-
-    // 🤖 System prompt
-    const systemPrompt = `
+    // 🤖 System instruction (IMPORTANT: keep it as first context)
+    const systemInstruction = `
 You are an AI Career Counsellor.
 
+Rules:
 - Help users choose careers
 - Suggest skills and roadmap
 - Keep answers short and practical
+- Be clear and structured
 `;
 
-    const result = await model.generateContent({
-      contents: [
+    // 🚀 Start chat session (correct way)
+    const chatSession = model.startChat({
+      history: [
         {
           role: "user",
-          parts: [{ text: systemPrompt }],
+          parts: [{ text: systemInstruction }],
         },
-        ...formattedHistory,
+        ...history,
       ],
       generationConfig: {
         temperature: 0.7,
       },
     });
 
+    // 💬 Send user message
+    const result = await chatSession.sendMessage(message);
     const reply = result.response.text().trim();
 
-    // 💾 Save messages
+    // 💾 Save conversation
     chat.messages.push({ role: "user", text: message });
     chat.messages.push({ role: "bot", text: reply });
 
     await chat.save();
 
-    res.json({
+    return res.json({
       chatId: chat._id,
       reply,
     });
   } catch (error) {
-    console.error("Chat Save Error:", error);
-    res.status(500).json({ message: "Chatbot failed" });
+    console.error("Chat Error:", error);
+    return res.status(500).json({ message: "Chatbot failed" });
   }
 };
 

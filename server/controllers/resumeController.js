@@ -5,6 +5,18 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse");
 
+// 🧠 Safe JSON parser
+const safeJSONParse = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      error: "Invalid JSON from AI",
+      raw: text,
+    };
+  }
+};
+
 export const analyzeResume = async (req, res) => {
   let filePath;
 
@@ -15,7 +27,7 @@ export const analyzeResume = async (req, res) => {
 
     filePath = req.file.path;
 
-    // 📄 Extract text from PDF
+    // 📄 Extract PDF text
     const dataBuffer = fs.readFileSync(filePath);
     const pdfData = await pdfParse(dataBuffer);
     const resumeText = pdfData.text;
@@ -26,58 +38,58 @@ export const analyzeResume = async (req, res) => {
       });
     }
 
-    // 🤖 Gemini Prompt
+    // 🤖 Strong ATS Prompt
     const prompt = `
-You are an expert ATS system and career coach.
+You are an expert ATS resume analyzer and career coach.
 
-Analyze the resume and return ONLY valid JSON:
+Return ONLY valid JSON (no markdown, no explanation):
 
 {
-  "score": number,
-  "keywords_missing": ["skill1", "skill2"],
-  "suggestions": ["improvement1", "improvement2"]
+  "score": number (0-100),
+  "keywords_missing": string[],
+  "suggestions": string[]
 }
 
 Rules:
-- No explanation
-- No markdown
-- Only JSON output
+- Output must be valid JSON only
+- No extra text, no markdown
+- Be strict and accurate
 
 Resume:
 ${resumeText}
 `;
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    // 🤖 Gemini chat (correct approach)
+    const chat = model.startChat({
       generationConfig: {
         temperature: 0.4,
       },
     });
 
+    const result = await chat.sendMessage(prompt);
     let text = result.response.text();
 
-    // 🧹 Clean Gemini output
-    text = text.replace(/```json|```/g, "").trim();
+    // 🧹 Clean AI response
+    text = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
 
-    let parsed;
+    // 📦 Parse safely
+    const parsed = safeJSONParse(text);
 
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = {
-        error: "Invalid JSON from AI",
-        raw: text,
-      };
-    }
-
-    res.json(parsed);
+    return res.json(parsed);
   } catch (error) {
     console.error("Resume Analysis Error:", error);
-    res.status(500).json({ message: "AI analysis failed" });
+    return res.status(500).json({ message: "AI analysis failed" });
   } finally {
-    // 🧹 Cleanup file
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // 🧹 Cleanup uploaded file safely
+    try {
+      if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (err) {
+      console.error("File cleanup error:", err);
     }
   }
 };
