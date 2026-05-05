@@ -2,7 +2,8 @@ import { model } from "../config/gemini.js";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+// 1. Load the module
+const pdfParseLib = require("pdf-parse");
 
 export const analyzeResume = async (req, res) => {
   try {
@@ -10,8 +11,17 @@ export const analyzeResume = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded." });
     }
 
-    // 📄 Extract text directly from the buffer (no disk access needed!)
-    const pdfData = await pdfParse(req.file.buffer);
+    // 2. Handle the "pdfParse is not a function" error
+    // Some versions/environments load it as { default: function } or just the function
+    const parse = pdfParseLib.default || pdfParseLib;
+    
+    // Ensure we are calling a function
+    if (typeof parse !== 'function') {
+      throw new Error("PDF parser library failed to load as a function.");
+    }
+
+    // 📄 Extract text from the buffer
+    const pdfData = await parse(req.file.buffer);
     const resumeText = pdfData.text;
 
     if (!resumeText || resumeText.trim().length < 50) {
@@ -41,7 +51,9 @@ export const analyzeResume = async (req, res) => {
 
   } catch (error) {
     console.error("Resume Analysis Error:", error);
-    return res.status(500).json({ message: "AI analysis failed." });
+    return res.status(500).json({ 
+      message: "AI analysis failed.", 
+      error: error.message 
+    });
   }
-  // No finally block needed because we never created a file!
 };
