@@ -34,20 +34,36 @@ export const getQuestions = (req, res) => {
 // 📤 Submit Test
 export const submitTest = async (req, res) => {
   try {
-    const { answers } = req.body; // e.g., { interest: 'coding', management_style: 'people-oriented' }
+    const { answers } = req.body; 
     const userId = req.user._id;
 
-    // Calculate score (Example logic: 10 points per answer)
-    const score = Object.keys(answers).length * 10; 
+    // 1. Define your "Answer Key" (Points map)
+    // Customize these values based on your test question options
+    const pointsMap = {
+      'coding': 20,
+      'design': 15,
+      'marketing': 15,
+      'management': 10,
+      'writing': 10,
+      'people-oriented': 10,
+      'task-oriented': 5,
+      // Add all other possible answer values here...
+    };
 
-    // Get smarter suggestions by passing both score AND answers
+    // 2. Calculate dynamic score
+    // This sums up points based on the actual values inside the 'answers' object
+    const score = Object.values(answers).reduce((total, val) => {
+      return total + (pointsMap[val] || 5); // Default to 5 points if answer is not in map
+    }, 0);
+
+    // 3. Get suggestions based on the new dynamic score and user answers
     const suggestions = getCareerSuggestions(score, answers);
 
-    // Save to Database
+    // 4. Save to Database
     const newTest = await TestResult.create({
       user: userId,
       answers,
-      score: score,
+      score: score, // This is now dynamic!
       recommendation: suggestions.join(", "),
     });
 
