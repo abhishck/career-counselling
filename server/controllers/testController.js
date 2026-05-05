@@ -1,5 +1,6 @@
 import { questions } from "../data/questions.js";
 import { model } from "../config/gemini.js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import TestResult from "../models/TestResult.js";
 
 // 📥 Get Questions
@@ -8,6 +9,7 @@ export const getQuestions = (req, res) => {
 };
 
 // 📤 Submit Test (WITH DB SAVE)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export const submitTest = async (req, res) => {
   try {

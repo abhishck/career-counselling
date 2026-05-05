@@ -15,6 +15,6 @@ router.get("/profile", protect, getUserProfile);
 router.put("/profile", protect, updateUserProfile);
 
 // In your routes file
-router.get("/api/user/stats", protect, getUserStats);
+router.get("/stats", protect, getUserStats);
 
 export default router;
