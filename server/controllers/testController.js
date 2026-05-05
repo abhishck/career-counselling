@@ -9,7 +9,7 @@ export const getQuestions = (req, res) => {
 };
 
 // 📤 Submit Test (WITH DB SAVE)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 export const submitTest = async (req, res) => {
   try {
